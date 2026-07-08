@@ -99,7 +99,7 @@ app.post('/api/generate', async (req, res) => {
       });
     }
 
-    if (prompt.length > 1000) {
+    if (prompt.length > 10000) {
       return res.status(400).json({
         error: 'Prompt is too long. Maximum 1000 characters allowed.',
         requestId
@@ -123,38 +123,61 @@ app.post('/api/generate', async (req, res) => {
 
     // --- PROMPT CONSTRUCTION ---
     const systemInstructions = {
-      frontend: `You are an expert React developer. Generate a modern, responsive React functional component using JSX and Tailwind CSS.
-Rules:
-1. Return ONLY the code, no markdown, no explanations, no comments
-2. Use proper React hooks if needed
-3. Ensure the code is complete and runnable
-4. Use Tailwind classes for styling
-5. Export default the component`,
+  frontend: `You are an expert React developer generating code for a LIVE PREVIEW SANDBOX with strict constraints. Follow every rule exactly.
 
-      backend: `You are an expert Node.js developer. Generate a complete Express.js API server.
-Rules:
-1. Return ONLY the code, no markdown, no explanations, no comments
-2. Include all necessary imports (express, cors, etc.)
-3. Include error handling middleware
-4. Use proper async/await patterns
-5. Export the app or start the server
-6. Include comments only if absolutely necessary for complex logic`,
+OUTPUT FORMAT (critical):
+- Return ONLY raw JavaScript/JSX source code. No markdown code fences (no \`\`\`), no explanations before or after, no commentary.
+- The very first character of your response must be code (e.g. "function" or "const"), not a backtick or any text.
 
-      fullstack: `Generate both frontend React component and backend Express API code structure.
-Rules:
-1. Provide clear separation between frontend and backend code
-2. Show how they connect (API endpoints)
-3. No markdown, no explanations outside code`,
+SANDBOX CONSTRAINTS (the code will NOT run in a normal app — read carefully):
+- Do NOT include any import statements. React, useState, and useEffect are already available in scope — use them directly (e.g. "useState(...)", not "React.useState(...)" or "import { useState } from 'react'").
+- Do NOT use any library other than plain React (no axios, react-router, icons packages, chart libraries, etc.). If the UI needs an icon, use an inline SVG or a Unicode symbol instead.
+- Do NOT make real network requests (no fetch/axios calls to external or placeholder URLs) and do NOT use localStorage/sessionStorage — the sandbox has no backend and no persistent storage. Simulate data with local component state instead.
+- Define exactly ONE top-level component using a NAMED function declaration, e.g. "function LoginForm() { ... }". Do not use an anonymous arrow function as the export, and do not use "export default" — a naming convention is required so the component can be mounted programmatically.
 
-      api: `Generate REST API endpoint logic only.
-Rules:
-1. Focus on controller logic
-2. Include input validation
-3. Error handling included
-4. No markdown, no explanations`
-    };
+CODE QUALITY:
+1. Use Tailwind utility classes for all styling — modern spacing, responsive breakpoints (sm/md/lg), and a coherent visual hierarchy.
+2. Use React hooks (useState/useEffect) where the feature genuinely needs interactivity or state — don't add hooks that aren't used.
+3. Include realistic placeholder content and working interactivity (e.g. a form should update state on input and show a real validation or submit state), not empty stubs or "// TODO" comments.
+4. Use semantic HTML elements (form, label, button, nav, etc.) and basic accessibility attributes (aria-label, alt text) where relevant.
+5. The component must be complete and self-contained — no undefined variables, no references to components or data that don't exist in the file.`,
 
-    console.log(`[${requestId}] Generating content...`);
+  backend: `You are an expert Node.js developer generating a complete Express.js API server.
+
+OUTPUT FORMAT (critical):
+- Return ONLY raw JavaScript source code. No markdown code fences (no \`\`\`), no explanations before or after, no commentary.
+- The very first character of your response must be code, not a backtick or any text.
+
+CODE QUALITY:
+1. Include all necessary require/import statements (express, cors, etc.) at the top.
+2. Include input validation and error-handling middleware appropriate to the feature described.
+3. Use proper async/await patterns for any asynchronous logic.
+4. Export the app (module.exports = app) or start the server with app.listen, matching what a typical Express project needs.
+5. Add brief comments ONLY where the logic is non-obvious (e.g. a regex, a security check, a non-trivial algorithm). Do not comment obvious lines like variable declarations or straightforward route definitions.
+6. Do not include placeholder logic like "// TODO: implement this" — implement the actual feature described in the prompt as completely as possible.`,
+
+  fullstack: `Generate both a frontend React component and a backend Express API endpoint for the described feature, clearly connected to each other.
+
+OUTPUT FORMAT (critical):
+- Return ONLY raw code, split into two clearly separated blocks using exactly these markers on their own lines: "// --- FRONTEND ---" and "// --- BACKEND ---".
+- No markdown code fences, no explanations outside the code.
+
+RULES:
+1. The frontend component should call the backend endpoint you define (matching route path and HTTP method) using fetch, with realistic request/response handling (loading and error states).
+2. The backend should validate input and return a JSON response shape that the frontend actually consumes.
+3. Keep both pieces minimal but complete and internally consistent — no mismatched field names between the two.`,
+
+  api: `Generate a single REST API endpoint's controller logic for the described feature.
+
+OUTPUT FORMAT (critical):
+- Return ONLY raw JavaScript source code. No markdown code fences, no explanations before or after.
+
+RULES:
+1. Focus on the controller/handler function(s) only — assume Express routing is already wired up elsewhere.
+2. Include input validation with clear, specific error messages (not generic "invalid input").
+3. Include proper error handling (try/catch, appropriate HTTP status codes).
+4. Do not include unrelated boilerplate (no server setup, no app.listen).`
+};
 
     // --- AI GENERATION WITH TIMEOUT ---
     const timeoutPromise = new Promise((_, reject) =>
